@@ -24,7 +24,7 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
-// Add new shop
+
 router.post('/', async (req, res) => {
   try {
     const { shop_name } = req.body;
@@ -42,7 +42,6 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Edit shop name
 router.put('/:id', async (req, res) => {
   try {
     const { shop_name } = req.body;
@@ -60,14 +59,51 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete shop
+//  FIXED — Delete shop with all related data first
 router.delete('/:id', async (req, res) => {
   try {
-    await db.query('DELETE FROM shops WHERE id = ?', [req.params.id]);
+    const shopId = req.params.id;
+
+    
+    const [requests] = await db.query(
+      'SELECT id FROM requests WHERE shop_id = ?',
+      [shopId]
+    );
+
+   
+    for (const request of requests) {
+      await db.query(
+        'DELETE FROM request_items WHERE request_id = ?',
+        [request.id]
+      );
+      await db.query(
+        'DELETE FROM notifications WHERE request_id = ?',
+        [request.id]
+      );
+    }
+
+   
+    await db.query(
+      'DELETE FROM notifications WHERE shop_id = ?',
+      [shopId]
+    );
+
+
+    await db.query(
+      'DELETE FROM requests WHERE shop_id = ?',
+      [shopId]
+    );
+
+  
+    await db.query(
+      'DELETE FROM shops WHERE id = ?',
+      [shopId]
+    );
+
     res.json({ message: 'Shop deleted successfully' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Delete shop error:', error);
+    res.status(500).json({ message: 'Server error', detail: error.message });
   }
 });
 

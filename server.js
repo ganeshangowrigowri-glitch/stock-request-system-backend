@@ -5,10 +5,14 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const app = express();
-
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    process.env.FRONTEND_URL  // add after Netlify deploy
+  ],
+  credentials: true
+}));
 app.use(express.json());
-
 app.get('/', (req, res) => {
   res.json({ message: 'Stock Request System API is running!' });
 });
