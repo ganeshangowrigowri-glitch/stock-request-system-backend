@@ -126,7 +126,6 @@ router.get('/sales/summary', async (req, res) => {
     );
 
     const result = rows.map(row => {
-      // ✅ parseInt both sides — type mismatch fix
       const brandPrices = prices.filter(p => parseInt(p.brand_id) === parseInt(row.brand_id));
       const getPrice = (sizeType) => {
         const p = brandPrices.find(p => p.size_type === sizeType);
@@ -156,7 +155,6 @@ router.get('/sales/summary', async (req, res) => {
   }
 });
 
-// ✅ FIXED — Single approved/summary route, no duplicate, with price calculation
 router.get('/approved/summary', async (req, res) => {
   try {
     const { category_id, filter } = req.query;
@@ -167,10 +165,7 @@ router.get('/approved/summary', async (req, res) => {
 
     const [rows] = await db.query(`
       SELECT
-        s.shop_name,
-        b.brand_name,
-        b.id as brand_id,
-        c.category_type,
+        s.shop_name, b.brand_name, b.id as brand_id, c.category_type,
         SUM(ri.approved_1) as qty_1,
         SUM(ri.approved_2) as qty_2,
         SUM(ri.approved_3) as qty_3,
@@ -198,16 +193,13 @@ router.get('/approved/summary', async (req, res) => {
     `, [category_id]);
 
     const result = rows.map(row => {
-      // ✅ parseInt fix — MySQL returns brand_id as string sometimes
       const brandPrices = prices.filter(p =>
         parseInt(p.brand_id) === parseInt(row.brand_id)
       );
-
       const getPrice = (sizeType) => {
         const found = brandPrices.find(p => p.size_type === sizeType);
         return found ? parseFloat(found.price) : 0;
       };
-
       let totalAmount = 0;
       if (row.category_type === 'beer') {
         totalAmount =
@@ -222,7 +214,6 @@ router.get('/approved/summary', async (req, res) => {
           ((parseInt(row.qty_2) || 0) * getPrice('P')) +
           ((parseInt(row.qty_3) || 0) * getPrice('N'));
       }
-
       return {
         ...row,
         qty_1: parseInt(row.qty_1) || 0,
@@ -238,6 +229,46 @@ router.get('/approved/summary', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Approved summary error:', error);
+    res.status(500).json({ message: 'Server error', detail: error.message });
+  }
+});
+
+// ✅ NEW — Present Stock Summary route only added here
+router.get('/present/summary', async (req, res) => {
+  try {
+    const { category_id, filter } = req.query;
+    let dateFilter = '';
+    if (filter === 'daily')   dateFilter = 'AND DATE(r.submitted_at) = CURDATE()';
+    if (filter === 'weekly')  dateFilter = 'AND r.submitted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)';
+    if (filter === 'monthly') dateFilter = 'AND r.submitted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)';
+
+    const [rows] = await db.query(`
+      SELECT
+        s.shop_name,
+        b.brand_name,
+        b.id as brand_id,
+        c.category_type,
+        SUM(ri.present_1) as qty_1,
+        SUM(ri.present_2) as qty_2,
+        SUM(ri.present_3) as qty_3,
+        SUM(ri.present_4) as qty_4,
+        SUM(ri.present_5) as qty_5,
+        SUM(ri.present_1 + ri.present_2 + ri.present_3 +
+            ri.present_4 + ri.present_5) as total_present
+      FROM request_items ri
+      JOIN requests r   ON ri.request_id = r.id
+      JOIN shops s      ON r.shop_id     = s.id
+      JOIN brands b     ON ri.brand_id   = b.id
+      JOIN categories c ON r.category_id = c.id
+      WHERE r.category_id = ?
+        ${dateFilter}
+      GROUP BY s.shop_name, b.brand_name, b.id, c.category_type
+      ORDER BY s.shop_name, b.brand_name
+    `, [category_id]);
+
+    res.json(rows);
+  } catch (error) {
+    console.error('Present summary error:', error);
     res.status(500).json({ message: 'Server error', detail: error.message });
   }
 });
@@ -318,23 +349,19 @@ router.put('/:id/received', async (req, res) => {
       'UPDATE requests SET status = ? WHERE id = ?',
       ['received', req.params.id]
     );
-
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Order not found with this ID' });
     }
-
     const [requestRow] = await db.query(
       'SELECT shop_id FROM requests WHERE id = ?',
       [req.params.id]
     );
-
     if (requestRow.length > 0) {
       await db.query(
         'INSERT INTO notifications (shop_id, request_id, message) VALUES (?, ?, ?)',
         [requestRow[0].shop_id, req.params.id, 'Order has been received by the bar']
       );
     }
-
     res.json({ message: 'Order marked as received' });
   } catch (error) {
     console.error('Received error:', error);
