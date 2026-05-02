@@ -214,7 +214,6 @@ router.get('/approved/summary', async (req, res) => {
   }
 });
 
-// ✅ Present Stock Summary — with price calculation
 router.get('/present/summary', async (req, res) => {
   try {
     const { category_id, filter } = req.query;
@@ -283,6 +282,58 @@ router.get('/present/summary', async (req, res) => {
   }
 });
 
+// ✅ /no-order is here — ABOVE /:id
+router.get('/no-order', async (req, res) => {
+  try {
+    const { filter, category_name } = req.query;
+
+    let dateCondition = '1=1';
+    if (filter === 'today') dateCondition = "DATE(r.submitted_at) = CURDATE()";
+    if (filter === 'week')  dateCondition = "r.submitted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
+    if (filter === 'month') dateCondition = "r.submitted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
+
+    let query = '';
+    const params = [];
+
+    if (category_name && category_name !== 'all') {
+      query = `
+        SELECT s.id AS shop_id, s.shop_name
+        FROM shops s
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM requests r
+          JOIN categories c ON r.category_id = c.id
+          WHERE r.shop_id = s.id
+            AND c.category_name = ?
+            AND ${dateCondition}
+        )
+        ORDER BY s.shop_name
+      `;
+      params.push(category_name);
+    } else {
+      query = `
+        SELECT s.id AS shop_id, s.shop_name
+        FROM shops s
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM requests r
+          WHERE r.shop_id = s.id
+            AND ${dateCondition}
+        )
+        ORDER BY s.shop_name
+      `;
+    }
+
+    const [rows] = await db.query(query, params);
+    res.json(rows);
+
+  } catch (error) {
+    console.error('No-order error:', error);
+    res.status(500).json({ message: 'Server error', detail: error.message });
+  }
+});
+
+// ✅ /:id is LAST — wildcard always below named routes
 router.get('/:id', async (req, res) => {
   try {
     const [request] = await db.query(
