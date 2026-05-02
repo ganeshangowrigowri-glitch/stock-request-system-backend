@@ -232,8 +232,7 @@ router.get('/approved/summary', async (req, res) => {
     res.status(500).json({ message: 'Server error', detail: error.message });
   }
 });
-
-// ✅ NEW — Present Stock Summary route only added here
+           //replaced//
 router.get('/present/summary', async (req, res) => {
   try {
     const { category_id, filter } = req.query;
@@ -244,14 +243,9 @@ router.get('/present/summary', async (req, res) => {
 
     const [rows] = await db.query(`
       SELECT
-        s.shop_name,
-        b.brand_name,
-        b.id as brand_id,
-        c.category_type,
-        SUM(ri.present_1) as qty_1,
-        SUM(ri.present_2) as qty_2,
-        SUM(ri.present_3) as qty_3,
-        SUM(ri.present_4) as qty_4,
+        s.shop_name, b.brand_name, b.id as brand_id, c.category_type,
+        SUM(ri.present_1) as qty_1, SUM(ri.present_2) as qty_2,
+        SUM(ri.present_3) as qty_3, SUM(ri.present_4) as qty_4,
         SUM(ri.present_5) as qty_5,
         SUM(ri.present_1 + ri.present_2 + ri.present_3 +
             ri.present_4 + ri.present_5) as total_present
@@ -260,142 +254,53 @@ router.get('/present/summary', async (req, res) => {
       JOIN shops s      ON r.shop_id     = s.id
       JOIN brands b     ON ri.brand_id   = b.id
       JOIN categories c ON r.category_id = c.id
-      WHERE r.category_id = ?
-        ${dateFilter}
+      WHERE r.category_id = ? ${dateFilter}
       GROUP BY s.shop_name, b.brand_name, b.id, c.category_type
       ORDER BY s.shop_name, b.brand_name
     `, [category_id]);
 
-    res.json(rows);
+    const [prices] = await db.query(`
+      SELECT bp.brand_id, bp.size_type, bp.price
+      FROM brand_prices bp
+      JOIN brands b ON bp.brand_id = b.id
+      WHERE b.category_id = ?
+    `, [category_id]);
+
+    const result = rows.map(row => {
+      const brandPrices = prices.filter(p => parseInt(p.brand_id) === parseInt(row.brand_id));
+      const getPrice = (sizeType) => {
+        const found = brandPrices.find(p => p.size_type === sizeType);
+        return found ? parseFloat(found.price) : 0;
+      };
+      let totalAmount = 0;
+      if (row.category_type === 'beer') {
+        totalAmount =
+          ((parseInt(row.qty_1) || 0) * getPrice('625ml Btl'))  +
+          ((parseInt(row.qty_2) || 0) * getPrice('500ml Cane')) +
+          ((parseInt(row.qty_3) || 0) * getPrice('330ml Cane')) +
+          ((parseInt(row.qty_4) || 0) * getPrice('500ml Btl'))  +
+          ((parseInt(row.qty_5) || 0) * getPrice('325ml Btl'));
+      } else {
+        totalAmount =
+          ((parseInt(row.qty_1) || 0) * getPrice('Q')) +
+          ((parseInt(row.qty_2) || 0) * getPrice('P')) +
+          ((parseInt(row.qty_3) || 0) * getPrice('N'));
+      }
+      return {
+        ...row,
+        qty_1: parseInt(row.qty_1) || 0,
+        qty_2: parseInt(row.qty_2) || 0,
+        qty_3: parseInt(row.qty_3) || 0,
+        qty_4: parseInt(row.qty_4) || 0,
+        qty_5: parseInt(row.qty_5) || 0,
+        total_present: parseInt(row.total_present) || 0,
+        total_amount: totalAmount.toFixed(2),
+      };
+    });
+
+    res.json(result);
   } catch (error) {
     console.error('Present summary error:', error);
     res.status(500).json({ message: 'Server error', detail: error.message });
   }
 });
-
-router.get('/:id', async (req, res) => {
-  try {
-    const [request] = await db.query(
-      `SELECT r.*, s.shop_name, c.category_name, c.category_type
-      FROM requests r
-      JOIN shops s ON r.shop_id = s.id
-      JOIN categories c ON r.category_id = c.id
-      WHERE r.id = ?`,
-      [req.params.id]
-    );
-    if (request.length === 0) {
-      return res.status(404).json({ message: 'Request not found' });
-    }
-    const [items] = await db.query(
-      `SELECT ri.*, b.brand_name
-      FROM request_items ri
-      JOIN brands b ON ri.brand_id = b.id
-      WHERE ri.request_id = ?`,
-      [req.params.id]
-    );
-    res.json({ request: request[0], items });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-router.put('/:id/approve', async (req, res) => {
-  try {
-    const { items } = req.body;
-    for (const item of items) {
-      await db.query(
-        `UPDATE request_items SET
-        approved_1 = ?, approved_2 = ?, approved_3 = ?,
-        approved_4 = ?, approved_5 = ?
-        WHERE id = ?`,
-        [
-          item.approved_1 || 0, item.approved_2 || 0, item.approved_3 || 0,
-          item.approved_4 || 0, item.approved_5 || 0, item.id,
-        ]
-      );
-    }
-    await db.query('UPDATE requests SET status = ? WHERE id = ?', ['approved', req.params.id]);
-    const [request] = await db.query('SELECT shop_id FROM requests WHERE id = ?', [req.params.id]);
-    await db.query(
-      'INSERT INTO notifications (shop_id, request_id, message) VALUES (?, ?, ?)',
-      [request[0].shop_id, req.params.id, 'Your request has been approved']
-    );
-    res.json({ message: 'Request approved successfully' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-router.put('/:id/reject', async (req, res) => {
-  try {
-    await db.query('UPDATE requests SET status = ? WHERE id = ?', ['rejected', req.params.id]);
-    const [request] = await db.query('SELECT shop_id FROM requests WHERE id = ?', [req.params.id]);
-    await db.query(
-      'INSERT INTO notifications (shop_id, request_id, message) VALUES (?, ?, ?)',
-      [request[0].shop_id, req.params.id, 'Your request has been rejected']
-    );
-    res.json({ message: 'Request rejected successfully' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-router.put('/:id/received', async (req, res) => {
-  try {
-    const [result] = await db.query(
-      'UPDATE requests SET status = ? WHERE id = ?',
-      ['received', req.params.id]
-    );
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Order not found with this ID' });
-    }
-    const [requestRow] = await db.query(
-      'SELECT shop_id FROM requests WHERE id = ?',
-      [req.params.id]
-    );
-    if (requestRow.length > 0) {
-      await db.query(
-        'INSERT INTO notifications (shop_id, request_id, message) VALUES (?, ?, ?)',
-        [requestRow[0].shop_id, req.params.id, 'Order has been received by the bar']
-      );
-    }
-    res.json({ message: 'Order marked as received' });
-  } catch (error) {
-    console.error('Received error:', error);
-    res.status(500).json({ message: 'Server error', detail: error.message });
-  }
-});
-
-router.delete('/clear/old', async (req, res) => {
-  try {
-    const [oldRequests] = await db.query(
-      'SELECT id FROM requests WHERE submitted_at < DATE_SUB(NOW(), INTERVAL 30 DAY)'
-    );
-    for (const reqItem of oldRequests) {
-      await db.query('DELETE FROM request_items WHERE request_id = ?', [reqItem.id]);
-      await db.query('DELETE FROM notifications WHERE request_id = ?', [reqItem.id]);
-    }
-    await db.query('DELETE FROM requests WHERE submitted_at < DATE_SUB(NOW(), INTERVAL 30 DAY)');
-    res.json({ message: 'Old requests cleared' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-router.delete('/:id', async (req, res) => {
-  try {
-    await db.query('DELETE FROM request_items WHERE request_id = ?', [req.params.id]);
-    await db.query('DELETE FROM notifications WHERE request_id = ?', [req.params.id]);
-    await db.query('DELETE FROM requests WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Request deleted successfully' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-module.exports = router;
