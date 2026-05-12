@@ -42,6 +42,23 @@ router.post('/', async (req, res) => {
   }
 });
 
+// ✅ /:id/access MUST be above /:id to avoid route conflict
+router.put('/:id/access', async (req, res) => {
+  try {
+    const { access_enabled, access_start_date, access_end_date } = req.body;
+    const startDate = access_start_date ? access_start_date.split('T')[0] : null;
+    const endDate = access_end_date ? access_end_date.split('T')[0] : null;
+    await db.query(
+      `UPDATE shops SET access_enabled = ?, access_start_date = ?, access_end_date = ? WHERE id = ?`,
+      [access_enabled, startDate, endDate, req.params.id]
+    );
+    res.json({ message: 'Access settings updated' });
+  } catch (error) {
+    console.error('Access update error:', error);
+    res.status(500).json({ message: 'Server error', detail: error.message });
+  }
+});
+
 router.put('/:id', async (req, res) => {
   try {
     const { shop_name } = req.body;
@@ -59,18 +76,16 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-//  FIXED — Delete shop with all related data first
+// FIXED — Delete shop with all related data first
 router.delete('/:id', async (req, res) => {
   try {
     const shopId = req.params.id;
 
-    
     const [requests] = await db.query(
       'SELECT id FROM requests WHERE shop_id = ?',
       [shopId]
     );
 
-   
     for (const request of requests) {
       await db.query(
         'DELETE FROM request_items WHERE request_id = ?',
@@ -82,19 +97,16 @@ router.delete('/:id', async (req, res) => {
       );
     }
 
-   
     await db.query(
       'DELETE FROM notifications WHERE shop_id = ?',
       [shopId]
     );
-
 
     await db.query(
       'DELETE FROM requests WHERE shop_id = ?',
       [shopId]
     );
 
-  
     await db.query(
       'DELETE FROM shops WHERE id = ?',
       [shopId]
@@ -106,20 +118,5 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ message: 'Server error', detail: error.message });
   }
 });
-router.put('/:id/access', async (req, res) => {
-  try {
-    const { access_enabled, access_start_date, access_end_date } = req.body;
-    // Convert to date only (remove time/timezone)
-    const startDate = access_start_date ? access_start_date.split('T')[0] : null;
-    const endDate = access_end_date ? access_end_date.split('T')[0] : null;
-    await db.query(
-      `UPDATE shops SET access_enabled = ?, access_start_date = ?, access_end_date = ? WHERE id = ?`,
-      [access_enabled, startDate, endDate, req.params.id]
-    );
-    res.json({ message: 'Access settings updated' });
-  } catch (error) {
-    console.error('Access update error:', error);
-    res.status(500).json({ message: 'Server error', detail: error.message });
-  }
-});
+
 module.exports = router;
