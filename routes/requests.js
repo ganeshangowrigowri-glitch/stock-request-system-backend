@@ -5,7 +5,11 @@ const db = require('../config/db');
 router.post('/', async (req, res) => {
   try {
     const { shop_id, category_id, items } = req.body;
+
+    // Allow submit if any present OR request value is entered
     const hasQuantity = items.some(item =>
+      item.present_1 > 0 || item.present_2 > 0 || item.present_3 > 0 ||
+      item.present_4 > 0 || item.present_5 > 0 ||
       item.request_1 > 0 || item.request_2 > 0 || item.request_3 > 0 ||
       item.request_4 > 0 || item.request_5 > 0
     );
