@@ -5,6 +5,26 @@ const db = require('../config/db');
 router.post('/', async (req, res) => {
   try {
     const { shop_id, category_id, items } = req.body;
+    // ── Access check ──────────────────────────────────────────
+    const [shopRows] = await db.query(
+      'SELECT access_enabled, access_start_date, access_end_date FROM shops WHERE id = ?',
+      [shop_id]
+    );
+    if (shopRows.length === 0) {
+      return res.status(404).json({ message: 'Shop not found' });
+    }
+    const shop = shopRows[0];
+    if (!shop.access_enabled) {
+      return res.status(403).json({ message: 'Shop access is disabled. Contact admin.' });
+    }
+    const today = new Date().toISOString().split('T')[0];
+    if (shop.access_start_date && today < shop.access_start_date) {
+      return res.status(403).json({ message: `Shop access starts from ${shop.access_start_date}.` });
+    }
+    if (shop.access_end_date && today > shop.access_end_date) {
+      return res.status(403).json({ message: 'Shop access has expired. Contact admin.' });
+    }
+    // ─────────────────────────────────────────────────────────
 
     // Allow submit if any present OR request value is entered
     const hasQuantity = items.some(item =>
