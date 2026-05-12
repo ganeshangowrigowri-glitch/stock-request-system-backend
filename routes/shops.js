@@ -5,7 +5,16 @@ const db = require('../config/db');
 router.get('/', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM shops ORDER BY shop_name');
-    res.json(rows);
+    const formatted = rows.map(shop => ({
+      ...shop,
+      access_start_date: shop.access_start_date
+        ? new Date(shop.access_start_date).toISOString().split('T')[0]
+        : null,
+      access_end_date: shop.access_end_date
+        ? new Date(shop.access_end_date).toISOString().split('T')[0]
+        : null,
+    }));
+    res.json(formatted);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -42,7 +51,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// ✅ /:id/access MUST be above /:id to avoid route conflict
+// ✅ /:id/access 
 router.put('/:id/access', async (req, res) => {
   try {
     const { access_enabled, access_start_date, access_end_date } = req.body;
