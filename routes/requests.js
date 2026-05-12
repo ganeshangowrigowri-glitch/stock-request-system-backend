@@ -17,13 +17,20 @@ router.post('/', async (req, res) => {
     if (!shop.access_enabled) {
       return res.status(403).json({ message: 'Shop access is disabled. Contact admin.' });
     }
-    const today = new Date().toISOString().split('T')[0];
-    if (shop.access_start_date && today < shop.access_start_date) {
-      return res.status(403).json({ message: `Shop access starts from ${shop.access_start_date}.` });
-    }
-    if (shop.access_end_date && today > shop.access_end_date) {
-      return res.status(403).json({ message: 'Shop access has expired. Contact admin.' });
-    }
+    const today = new Date().toISOString().split('T')[0]; // "2026-05-12"
+const startDate = shop.access_start_date 
+  ? new Date(shop.access_start_date).toISOString().split('T')[0] 
+  : null;
+const endDate = shop.access_end_date 
+  ? new Date(shop.access_end_date).toISOString().split('T')[0] 
+  : null;
+
+if (startDate && today < startDate) {
+  return res.status(403).json({ message: `Shop access starts from ${startDate}. Contact admin.` });
+}
+if (endDate && today > endDate) {
+  return res.status(403).json({ message: `Shop access expired on ${endDate}. Contact admin.` });
+}
     // ─────────────────────────────────────────────────────────
 
     // Allow submit if any present OR request value is entered

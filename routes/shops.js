@@ -109,11 +109,12 @@ router.delete('/:id', async (req, res) => {
 router.put('/:id/access', async (req, res) => {
   try {
     const { access_enabled, access_start_date, access_end_date } = req.body;
+    // Convert to date only (remove time/timezone)
+    const startDate = access_start_date ? access_start_date.split('T')[0] : null;
+    const endDate = access_end_date ? access_end_date.split('T')[0] : null;
     await db.query(
-      `UPDATE shops 
-       SET access_enabled = ?, access_start_date = ?, access_end_date = ?
-       WHERE id = ?`,
-      [access_enabled, access_start_date || null, access_end_date || null, req.params.id]
+      `UPDATE shops SET access_enabled = ?, access_start_date = ?, access_end_date = ? WHERE id = ?`,
+      [access_enabled, startDate, endDate, req.params.id]
     );
     res.json({ message: 'Access settings updated' });
   } catch (error) {
