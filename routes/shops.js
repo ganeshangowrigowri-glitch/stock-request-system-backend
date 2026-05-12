@@ -106,5 +106,19 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ message: 'Server error', detail: error.message });
   }
 });
-
+router.put('/:id/access', async (req, res) => {
+  try {
+    const { access_enabled, access_start_date, access_end_date } = req.body;
+    await db.query(
+      `UPDATE shops 
+       SET access_enabled = ?, access_start_date = ?, access_end_date = ?
+       WHERE id = ?`,
+      [access_enabled, access_start_date || null, access_end_date || null, req.params.id]
+    );
+    res.json({ message: 'Access settings updated' });
+  } catch (error) {
+    console.error('Access update error:', error);
+    res.status(500).json({ message: 'Server error', detail: error.message });
+  }
+});
 module.exports = router;
