@@ -5,9 +5,10 @@ const db = require('../config/db');
 router.post('/', async (req, res) => {
   try {
     const { shop_id, category_id, items } = req.body;
+
     // ── Access check ──────────────────────────────────────────
     const [shopRows] = await db.query(
-      'SELECT access_enabled, access_start_date, access_end_date FROM shops WHERE id = ?',
+      'SELECT access_enabled, access_start_date, access_end_date, allowed_days FROM shops WHERE id = ?',
       [shop_id]
     );
     if (shopRows.length === 0) {
@@ -17,20 +18,31 @@ router.post('/', async (req, res) => {
     if (!shop.access_enabled) {
       return res.status(403).json({ message: 'Shop access is disabled. Contact admin.' });
     }
-    const today = new Date().toISOString().split('T')[0]; // "2026-05-12"
-const startDate = shop.access_start_date 
-  ? new Date(shop.access_start_date).toISOString().split('T')[0] 
-  : null;
-const endDate = shop.access_end_date 
-  ? new Date(shop.access_end_date).toISOString().split('T')[0] 
-  : null;
+    const today = new Date().toISOString().split('T')[0];
+    const startDate = shop.access_start_date
+      ? new Date(shop.access_start_date).toISOString().split('T')[0]
+      : null;
+    const endDate = shop.access_end_date
+      ? new Date(shop.access_end_date).toISOString().split('T')[0]
+      : null;
+    if (startDate && today < startDate) {
+      return res.status(403).json({ message: `Shop access starts from ${startDate}. Contact admin.` });
+    }
+    if (endDate && today > endDate) {
+      return res.status(403).json({ message: `Shop access expired on ${endDate}. Contact admin.` });
+    }
 
-if (startDate && today < startDate) {
-  return res.status(403).json({ message: `Shop access starts from ${startDate}. Contact admin.` });
-}
-if (endDate && today > endDate) {
-  return res.status(403).json({ message: `Shop access expired on ${endDate}. Contact admin.` });
-}
+    // ── Allowed days check ────────────────────────────────────
+    if (shop.allowed_days) {
+      const days = shop.allowed_days.split(',').map(d => d.trim().toLowerCase());
+      const todayDay = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+      if (todayDay !== 'friday' && !days.includes(todayDay)) {
+        const readable = days.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ');
+        return res.status(403).json({
+          message: `Orders not allowed today. Your allowed days: ${readable}.`
+        });
+      }
+    }
     // ─────────────────────────────────────────────────────────
 
     // Allow submit if any present OR request value is entered
@@ -313,19 +325,15 @@ router.get('/present/summary', async (req, res) => {
   }
 });
 
-// ✅ /no-order is here — ABOVE /:id
 router.get('/no-order', async (req, res) => {
   try {
     const { filter, category_name } = req.query;
-
     let dateCondition = '1=1';
     if (filter === 'today') dateCondition = "DATE(r.submitted_at) = CURDATE()";
     if (filter === 'week')  dateCondition = "r.submitted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
     if (filter === 'month') dateCondition = "r.submitted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
-
     let query = '';
     const params = [];
-
     if (category_name && category_name !== 'all') {
       query = `
         SELECT s.id AS shop_id, s.shop_name
@@ -354,17 +362,14 @@ router.get('/no-order', async (req, res) => {
         ORDER BY s.shop_name
       `;
     }
-
     const [rows] = await db.query(query, params);
     res.json(rows);
-
   } catch (error) {
     console.error('No-order error:', error);
     res.status(500).json({ message: 'Server error', detail: error.message });
   }
 });
 
-// ✅ /:id is LAST — wildcard always below named routes
 router.get('/:id', async (req, res) => {
   try {
     const [request] = await db.query(

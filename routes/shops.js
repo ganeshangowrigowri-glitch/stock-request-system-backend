@@ -13,6 +13,7 @@ router.get('/', async (req, res) => {
       access_end_date: shop.access_end_date
         ? new Date(shop.access_end_date).toISOString().split('T')[0]
         : null,
+      allowed_days: shop.allowed_days || null,  // ← NEW
     }));
     res.json(formatted);
   } catch (error) {
@@ -51,15 +52,16 @@ router.post('/', async (req, res) => {
   }
 });
 
-// ✅ /:id/access 
+//  /:id/access — NEW: allowed_days added
 router.put('/:id/access', async (req, res) => {
   try {
-    const { access_enabled, access_start_date, access_end_date } = req.body;
+    const { access_enabled, access_start_date, access_end_date, allowed_days } = req.body;
     const startDate = access_start_date ? access_start_date.split('T')[0] : null;
     const endDate = access_end_date ? access_end_date.split('T')[0] : null;
+    const days = allowed_days && allowed_days.length > 0 ? allowed_days.join(',') : null;  // ← NEW
     await db.query(
-      `UPDATE shops SET access_enabled = ?, access_start_date = ?, access_end_date = ? WHERE id = ?`,
-      [access_enabled, startDate, endDate, req.params.id]
+      `UPDATE shops SET access_enabled = ?, access_start_date = ?, access_end_date = ?, allowed_days = ? WHERE id = ?`,
+      [access_enabled, startDate, endDate, days, req.params.id]
     );
     res.json({ message: 'Access settings updated' });
   } catch (error) {
