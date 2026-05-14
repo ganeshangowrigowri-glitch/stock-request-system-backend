@@ -18,7 +18,7 @@ router.post('/', async (req, res) => {
     if (!shop.access_enabled) {
       return res.status(403).json({ message: 'Shop access is disabled. Contact admin.' });
     }
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA', { timeZone:'Asia/Colombo' });
     const startDate = shop.access_start_date
       ? new Date(shop.access_start_date).toISOString().split('T')[0]
       : null;
@@ -35,7 +35,10 @@ router.post('/', async (req, res) => {
     // ── Allowed days check ────────────────────────────────────
     if (shop.allowed_days) {
       const days = shop.allowed_days.split(',').map(d => d.trim().toLowerCase());
-      const todayDay = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+      const todayDay = new Date().toLocaleDateString('en-US', {
+        weekday:'long',
+        timeZone:'Asia/Colombo'
+      }). toLowerCase();
       if (todayDay !== 'friday' && !days.includes(todayDay)) {
         const readable = days.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ');
         return res.status(403).json({
