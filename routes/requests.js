@@ -132,11 +132,19 @@ router.get('/shop/:shopId', async (req, res) => {
 
 router.get('/sales/summary', async (req, res) => {
   try {
-    const { category_id, filter } = req.query;
+    const { category_id, date_from, date_to } = req.query;
     let dateFilter = '';
-    if (filter === 'daily')   dateFilter = 'AND DATE(r.submitted_at) = CURDATE()';
-    if (filter === 'weekly')  dateFilter = 'AND r.submitted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)';
-    if (filter === 'monthly') dateFilter = 'AND r.submitted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)';
+    const params = [category_id];
+    if (date_from && date_to) {
+  dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) >= ? AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) <= ?`;
+  params.push(date_from, date_to);
+} else if (date_from) {
+  dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) >= ?`;
+  params.push(date_from);
+} else if (date_to) {
+  dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) <= ?`;
+  params.push(date_to);
+}
     const [rows] = await db.query(
       `SELECT
         s.shop_name, b.brand_name, b.id as brand_id, c.category_type,
@@ -152,7 +160,7 @@ router.get('/sales/summary', async (req, res) => {
       WHERE r.category_id = ? ${dateFilter}
       GROUP BY s.shop_name, b.brand_name, b.id, c.category_type
       ORDER BY s.shop_name, b.brand_name`,
-      [category_id]
+      params
     );
     const [prices] = await db.query(
       `SELECT bp.brand_id, bp.size_type, bp.price
@@ -189,14 +197,21 @@ router.get('/sales/summary', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
-
 router.get('/approved/summary', async (req, res) => {
   try {
-    const { category_id, filter } = req.query;
+    const { category_id, date_from, date_to } = req.query;
     let dateFilter = '';
-    if (filter === 'daily')   dateFilter = 'AND DATE(r.submitted_at) = CURDATE()';
-    if (filter === 'weekly')  dateFilter = 'AND r.submitted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)';
-    if (filter === 'monthly') dateFilter = 'AND r.submitted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)';
+    const params = [category_id];
+    if (date_from && date_to) {
+  dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) >= ? AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) <= ?`;
+  params.push(date_from, date_to);
+} else if (date_from) {
+  dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) >= ?`;
+  params.push(date_from);
+} else if (date_to) {
+  dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) <= ?`;
+  params.push(date_to);
+}
     const [rows] = await db.query(`
       SELECT
         s.shop_name, b.brand_name, b.id as brand_id, c.category_type,
@@ -206,16 +221,16 @@ router.get('/approved/summary', async (req, res) => {
         SUM(ri.approved_1 + ri.approved_2 + ri.approved_3 +
             ri.approved_4 + ri.approved_5) as total_approved
       FROM request_items ri
-      JOIN requests r  ON ri.request_id = r.id
-      JOIN shops s     ON r.shop_id     = s.id
-      JOIN brands b    ON ri.brand_id   = b.id
+      JOIN requests r   ON ri.request_id = r.id
+      JOIN shops s      ON r.shop_id     = s.id
+      JOIN brands b     ON ri.brand_id   = b.id
       JOIN categories c ON r.category_id = c.id
       WHERE r.category_id = ?
         AND r.status IN ('approved', 'received')
         ${dateFilter}
       GROUP BY s.shop_name, b.brand_name, b.id, c.category_type
       ORDER BY s.shop_name, b.brand_name
-    `, [category_id]);
+    `, params);
     const [prices] = await db.query(`
       SELECT bp.brand_id, bp.size_type, bp.price
       FROM brand_prices bp
@@ -262,11 +277,19 @@ router.get('/approved/summary', async (req, res) => {
 
 router.get('/present/summary', async (req, res) => {
   try {
-    const { category_id, filter } = req.query;
+    const { category_id, date_from, date_to } = req.query;
     let dateFilter = '';
-    if (filter === 'daily')   dateFilter = 'AND DATE(r.submitted_at) = CURDATE()';
-    if (filter === 'weekly')  dateFilter = 'AND r.submitted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)';
-    if (filter === 'monthly') dateFilter = 'AND r.submitted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)';
+    const params = [category_id];
+    if (date_from && date_to) {
+  dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) >= ? AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) <= ?`;
+  params.push(date_from, date_to);
+} else if (date_from) {
+  dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) >= ?`;
+  params.push(date_from);
+} else if (date_to) {
+  dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) <= ?`;
+  params.push(date_to);
+}
     const [rows] = await db.query(`
       SELECT
         s.shop_name, b.brand_name, b.id as brand_id, c.category_type,
@@ -280,10 +303,12 @@ router.get('/present/summary', async (req, res) => {
       JOIN shops s      ON r.shop_id     = s.id
       JOIN brands b     ON ri.brand_id   = b.id
       JOIN categories c ON r.category_id = c.id
-      WHERE r.category_id = ? ${dateFilter}
+      WHERE r.category_id = ?
+        AND r.status IN ('approved', 'received')
+        ${dateFilter}
       GROUP BY s.shop_name, b.brand_name, b.id, c.category_type
       ORDER BY s.shop_name, b.brand_name
-    `, [category_id]);
+    `, params);
     const [prices] = await db.query(`
       SELECT bp.brand_id, bp.size_type, bp.price
       FROM brand_prices bp
@@ -325,106 +350,6 @@ router.get('/present/summary', async (req, res) => {
   } catch (error) {
     console.error('Present summary error:', error);
     res.status(500).json({ message: 'Server error', detail: error.message });
-  }
-});
-
-router.get('/no-order', async (req, res) => {
-  try {
-    const { filter, category_name } = req.query;
-    let dateCondition = '1=1';
-    if (filter === 'today') dateCondition = "DATE(r.submitted_at) = CURDATE()";
-    if (filter === 'week')  dateCondition = "r.submitted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
-    if (filter === 'month') dateCondition = "r.submitted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
-    let query = '';
-    const params = [];
-    if (category_name && category_name !== 'all') {
-      query = `
-        SELECT s.id AS shop_id, s.shop_name
-        FROM shops s
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM requests r
-          JOIN categories c ON r.category_id = c.id
-          WHERE r.shop_id = s.id
-            AND c.category_name = ?
-            AND ${dateCondition}
-        )
-        ORDER BY s.shop_name
-      `;
-      params.push(category_name);
-    } else {
-      query = `
-        SELECT s.id AS shop_id, s.shop_name
-        FROM shops s
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM requests r
-          WHERE r.shop_id = s.id
-            AND ${dateCondition}
-        )
-        ORDER BY s.shop_name
-      `;
-    }
-    const [rows] = await db.query(query, params);
-    res.json(rows);
-  } catch (error) {
-    console.error('No-order error:', error);
-    res.status(500).json({ message: 'Server error', detail: error.message });
-  }
-});
-
-router.get('/:id', async (req, res) => {
-  try {
-    const [request] = await db.query(
-      `SELECT r.*, s.shop_name, c.category_name, c.category_type
-      FROM requests r
-      JOIN shops s ON r.shop_id = s.id
-      JOIN categories c ON r.category_id = c.id
-      WHERE r.id = ?`,
-      [req.params.id]
-    );
-    if (request.length === 0) {
-      return res.status(404).json({ message: 'Request not found' });
-    }
-    const [items] = await db.query(
-      `SELECT ri.*, b.brand_name
-      FROM request_items ri
-      JOIN brands b ON ri.brand_id = b.id
-      WHERE ri.request_id = ?`,
-      [req.params.id]
-    );
-    res.json({ request: request[0], items });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-router.put('/:id/approve', async (req, res) => {
-  try {
-    const { items } = req.body;
-    for (const item of items) {
-      await db.query(
-        `UPDATE request_items SET
-        approved_1 = ?, approved_2 = ?, approved_3 = ?,
-        approved_4 = ?, approved_5 = ?
-        WHERE id = ?`,
-        [
-          item.approved_1 || 0, item.approved_2 || 0, item.approved_3 || 0,
-          item.approved_4 || 0, item.approved_5 || 0, item.id,
-        ]
-      );
-    }
-    await db.query('UPDATE requests SET status = ? WHERE id = ?', ['approved', req.params.id]);
-    const [request] = await db.query('SELECT shop_id FROM requests WHERE id = ?', [req.params.id]);
-    await db.query(
-      'INSERT INTO notifications (shop_id, request_id, message) VALUES (?, ?, ?)',
-      [request[0].shop_id, req.params.id, 'Your request has been approved']
-    );
-    res.json({ message: 'Request approved successfully' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
   }
 });
 
