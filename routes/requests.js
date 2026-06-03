@@ -129,6 +129,33 @@ router.get('/shop/:shopId', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+router.get('/:id', async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT r.*, s.shop_name, c.category_name, c.category_type
+      FROM requests r
+      JOIN shops s ON r.shop_id = s.id
+      JOIN categories c ON r.category_id = c.id
+      WHERE r.id = ?`,
+      [req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+    const [items] = await db.query(
+      `SELECT ri.*, b.brand_name
+      FROM request_items ri
+      JOIN brands b ON ri.brand_id = b.id
+      WHERE ri.request_id = ?
+      ORDER BY b.brand_name`,
+      [req.params.id]
+    );
+    res.json({ request: rows[0], items });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 router.get('/sales/summary', async (req, res) => {
   try {
