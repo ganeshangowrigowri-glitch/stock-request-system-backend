@@ -129,33 +129,7 @@ router.get('/shop/:shopId', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
-router.get('/:id', async (req, res) => {
-  try {
-    const [rows] = await db.query(
-      `SELECT r.*, s.shop_name, c.category_name, c.category_type
-      FROM requests r
-      JOIN shops s ON r.shop_id = s.id
-      JOIN categories c ON r.category_id = c.id
-      WHERE r.id = ?`,
-      [req.params.id]
-    );
-    if (rows.length === 0) {
-      return res.status(404).json({ message: 'Request not found' });
-    }
-    const [items] = await db.query(
-      `SELECT ri.*, b.brand_name
-      FROM request_items ri
-      JOIN brands b ON ri.brand_id = b.id
-      WHERE ri.request_id = ?
-      ORDER BY b.brand_name`,
-      [req.params.id]
-    );
-    res.json({ request: rows[0], items });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+
 
 router.get('/sales/summary', async (req, res) => {
   try {
@@ -377,6 +351,63 @@ router.get('/present/summary', async (req, res) => {
   } catch (error) {
     console.error('Present summary error:', error);
     res.status(500).json({ message: 'Server error', detail: error.message });
+  }
+});
+router.get('/:id', async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT r.*, s.shop_name, c.category_name, c.category_type
+      FROM requests r
+      JOIN shops s ON r.shop_id = s.id
+      JOIN categories c ON r.category_id = c.id
+      WHERE r.id = ?`,
+      [req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+    const [items] = await db.query(
+      `SELECT ri.*, b.brand_name
+      FROM request_items ri
+      JOIN brands b ON ri.brand_id = b.id
+      WHERE ri.request_id = ?
+      ORDER BY b.brand_name`,
+      [req.params.id]
+    );
+    res.json({ request: rows[0], items });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+router.put('/:id/approve', async (req, res) => {
+  try {
+    const { items } = req.body;
+    for (const item of items) {
+      await db.query(
+        `UPDATE request_items SET 
+          approved_1=?, approved_2=?, approved_3=?, approved_4=?, approved_5=?
+        WHERE id=?`,
+        [
+          item.approved_1 || 0,
+          item.approved_2 || 0,
+          item.approved_3 || 0,
+          item.approved_4 || 0,
+          item.approved_5 || 0,
+          item.id
+        ]
+      );
+    }
+    await db.query('UPDATE requests SET status=? WHERE id=?', ['approved', req.params.id]);
+    const [request] = await db.query('SELECT shop_id FROM requests WHERE id=?', [req.params.id]);
+    await db.query(
+      'INSERT INTO notifications (shop_id, request_id, message) VALUES (?,?,?)',
+      [request[0].shop_id, req.params.id, 'Your request has been approved']
+    );
+    res.json({ message: 'Request approved successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
