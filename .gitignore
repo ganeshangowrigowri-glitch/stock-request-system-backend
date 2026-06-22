@@ -2,4 +2,9 @@ node_modules/
 .env
 .env.local
 .env.production
+backend/node_modules/
+mobile-app/node_modules/
+web-dashboard/node_modules/
+MySQL Workbench 8.0 CE/
+*.sql
 

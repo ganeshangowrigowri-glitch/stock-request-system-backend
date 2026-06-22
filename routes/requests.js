@@ -353,6 +353,47 @@ router.get('/present/summary', async (req, res) => {
     res.status(500).json({ message: 'Server error', detail: error.message });
   }
 });
+router.get('/no-order', async (req, res) => {
+  try {
+    const { filter, category_name } = req.query;
+    const period = filter; 
+
+    let dateFilter = '';
+    const params = [];
+
+    if (period === 'today') {
+      dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) = CURDATE()`;
+    } else if (period === 'week') {
+      dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`;
+    } else if (period === 'month') {
+      dateFilter = `AND DATE(CONVERT_TZ(r.submitted_at, '+00:00', '+05:30')) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`;
+    }
+
+    let categoryFilter = '';
+if (category_name && category_name !== 'all') {
+  categoryFilter = `AND c.category_name = ?`;
+  params.push(category_name);
+}
+
+  const [shopRows] = await db.query(
+  `SELECT s.id, s.shop_name 
+   FROM shops s
+   WHERE s.access_enabled = 1
+   AND s.id NOT IN (
+     SELECT DISTINCT r.shop_id 
+     FROM requests r
+     JOIN categories c ON r.category_id = c.id
+     WHERE 1=1 ${categoryFilter} ${dateFilter}
+   )
+   ORDER BY s.shop_name`,
+  params
+);
+    res.json(shopRows);
+  } catch (error) {
+    console.error('No order fetch error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 router.get('/:id', async (req, res) => {
   try {
     const [rows] = await db.query(

@@ -25,10 +25,15 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { brand_name, category_id, prices } = req.body;
-    const [result] = await db.query(
-      'INSERT INTO brands (category_id, brand_name) VALUES (?, ?)',
-      [category_id, brand_name]
-    );
+    // AFTER
+const [[{ maxOrder }]] = await db.query(
+  'SELECT COALESCE(MAX(order_index), 0) as maxOrder FROM brands WHERE category_id = ?',
+  [category_id]
+);
+const [result] = await db.query(
+  'INSERT INTO brands (category_id, brand_name, order_index) VALUES (?, ?, ?)',
+  [category_id, brand_name, maxOrder + 1]
+);
     const brand_id = result.insertId;
     for (const p of prices) {
       await db.query(
